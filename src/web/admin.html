@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#142b40">
+  <title>Administration | MoCS</title>
+  <link rel="icon" type="image/png" href="/portal/assets/ministry-logo.png">
+  <link rel="stylesheet" href="/portal/assets/portal.css">
+  <script src="/portal/assets/portal.js" defer></script>
+</head>
+<body data-portal="admin">
+  <header class="topbar">
+    <a class="brand" href="/portal/" aria-label="Ministry portal home">
+      <span><strong>MoCS</strong><small>ADMINISTRATION</small></span>
+    </a>
+    <nav class="main-nav" aria-label="Main navigation">
+      <a class="nav-link" href="/portal/">My account</a>
+      <a class="nav-link active" href="/portal/admin">Administration</a>
+    </nav>
+    <div class="topbar-actions">
+      <span id="signed-in-user" class="signed-in-user" hidden></span>
+      <button id="sign-out" class="icon-button" type="button" title="Sign out" aria-label="Sign out" hidden>↗</button>
+      <a id="sign-in" class="button button-dark" href="/portal/auth/discord?next=%2Fportal%2Fadmin">Sign in with Discord <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
+
+  <main class="page-shell admin-shell">
+    <section class="page-heading admin-heading">
+      <div>
+        <p class="eyebrow"><span class="eyebrow-rule"></span> PRIVILEGED ACCESS</p>
+        <h1>Administration</h1>
+        <p class="heading-copy">Manage linked accounts and privileged users.</p>
+      </div>
+      <!-- MINISTRY_LOGO -->
+    </section>
+
+    <section id="admin-access" class="portal-panel" aria-labelledby="records-title">
+      <div class="panel-topline"><span class="section-label">LINKED ACCOUNTS</span><span id="record-count" class="record-count">— records</span></div>
+      <div id="admin-content" class="admin-content" aria-live="polite">
+        <div class="loading-line"><span class="loading-dot"></span> Checking privileges…</div>
+      </div>
+    </section>
+
+    <section id="privileged-panel" class="portal-panel" aria-labelledby="privileged-title" hidden>
+      <div class="panel-topline"><span id="privileged-title" class="section-label">PRIVILEGED USERS</span><span id="privileged-count" class="record-count">— users</span></div>
+      <div class="admin-content">
+        <div class="table-wrap"><table class="records-table"><thead><tr><th>DISCORD ID</th><th>ACTION</th></tr></thead><tbody id="privileged-user-rows"><tr><td colspan="2" class="empty-table">Loading privileged users…</td></tr></tbody></table></div>
+        <div class="admin-form-wrap">
+          <div class="form-heading"><h2>Add a privileged user</h2><p>Privileged users can open this page and use restricted bot commands. The protected owner and your own account cannot be removed here.</p></div>
+          <form id="privileged-form" class="link-form">
+            <label class="field">DISCORD USER ID<input name="discordId" inputmode="numeric" pattern="[0-9]{17,20}" maxlength="20" required placeholder="17–20 digits"></label>
+            <button class="button button-dark" type="submit">Add user <span aria-hidden="true">↗</span></button>
+          </form>
+          <p id="privileged-message" class="form-message" role="status"></p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="page-footer"><span>RESTRICTED ADMINISTRATION</span><span>Changes are stored in the bot's database.</span></footer>
+  </main>
+</body>
+</html>

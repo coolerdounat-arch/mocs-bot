@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#142b40">
+  <title>Member Dashboard | MoCS</title>
+  <link rel="icon" type="image/png" href="/portal/assets/ministry-logo.png">
+  <link rel="stylesheet" href="/portal/assets/portal.css">
+  <script src="/portal/assets/portal.js" defer></script>
+</head>
+<body data-portal="member">
+  <header class="topbar">
+    <a class="brand" href="/portal/" aria-label="Ministry portal home">
+      <span><strong>MoCS</strong><small>MEMBER PORTAL</small></span>
+    </a>
+    <nav class="main-nav" aria-label="Main navigation">
+      <a class="nav-link active" href="/portal/">My account</a>
+      <a class="nav-link" href="/portal/admin">Administration</a>
+    </nav>
+    <div class="topbar-actions">
+      <span id="signed-in-user" class="signed-in-user" hidden></span>
+      <button id="sign-out" class="icon-button" type="button" title="Sign out" aria-label="Sign out" hidden>↗</button>
+      <a id="sign-in" class="button button-dark" href="/portal/auth/discord?next=%2Fportal%2F">Sign in with Discord <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <section class="page-heading">
+      <div>
+        <p class="eyebrow"><span class="eyebrow-rule"></span> MEMBER SERVICES</p>
+        <h1>Member dashboard</h1>
+        <p class="heading-copy">Your linked Roblox account, group ranks, quota, and recent activity.</p>
+      </div>
+      <!-- MINISTRY_LOGO -->
+    </section>
+
+    <section class="portal-panel" aria-labelledby="account-title">
+      <div class="panel-topline"><span class="section-label">PERSONAL RECORD</span><span id="connection-status" class="status status-muted"><i></i> Checking access</span></div>
+      <div id="account-content" class="account-content" aria-live="polite">
+        <div class="loading-line"><span class="loading-dot"></span> Checking your account…</div>
+      </div>
+    </section>
+
+    <section id="member-dashboard" class="member-dashboard" aria-labelledby="dashboard-title" hidden>
+      <div class="dashboard-heading">
+        <div>
+          <h2 id="dashboard-title">Overview</h2>
+          <p>Your profile, standing, recent activity, and bot status.</p>
+        </div>
+        <button id="dashboard-refresh" class="button button-light" type="button">Refresh</button>
+      </div>
+      <p id="dashboard-message" class="dashboard-message" role="status" aria-live="polite"></p>
+      <section class="member-profile" aria-label="Roblox profile">
+        <div class="member-portrait">
+          <img id="member-avatar" alt="" hidden>
+          <span id="member-avatar-placeholder" aria-hidden="true">M</span>
+        </div>
+        <div class="member-profile-main">
+          <p class="identity-label">LINKED ROBLOX PROFILE</p>
+          <h3 id="member-display-name">Loading profile…</h3>
+          <p id="member-username" class="member-username"></p>
+        </div>
+        <div class="member-profile-meta">
+          <span>ACCOUNT CREATED</span>
+          <strong id="member-created">Loading…</strong>
+        </div>
+        <a id="member-profile-link" class="profile-link" href="https://www.roblox.com/" target="_blank" rel="noopener noreferrer">View Roblox profile <span aria-hidden="true">↗</span></a>
+      </section>
+      <section class="runtime-panel" aria-labelledby="runtime-title">
+        <div class="runtime-heading">
+          <div><p class="identity-label">SERVICE HEALTH</p><h3 id="runtime-title">Bot runtime</h3></div>
+          <span id="runtime-status" class="runtime-status"><i></i> Checking</span>
+        </div>
+        <dl class="runtime-facts">
+          <div><dt>Bot uptime</dt><dd id="runtime-uptime">—</dd></div>
+          <div><dt>Discord latency</dt><dd id="runtime-latency">—</dd></div>
+          <div><dt>Process memory</dt><dd id="runtime-memory">—</dd></div>
+          <div><dt>Version</dt><dd id="runtime-version">—</dd></div>
+        </dl>
+      </section>
+      <div class="dashboard-grid">
+        <section class="dashboard-module" aria-labelledby="ranks-title">
+          <div class="dashboard-module-heading"><h3 id="ranks-title">Group ranks</h3><span>ROBLOX</span></div>
+          <div id="dashboard-ranks" class="dashboard-list"><div class="loading-line"><span class="loading-dot"></span> Loading ranks…</div></div>
+        </section>
+        <section class="dashboard-module" aria-labelledby="quota-title">
+          <div class="dashboard-module-heading"><h3 id="quota-title">Current quota points</h3><span>BY DEPARTMENT</span></div>
+          <div id="dashboard-quota" class="dashboard-list"><div class="loading-line"><span class="loading-dot"></span> Loading quota…</div></div>
+        </section>
+      </div>
+      <section class="dashboard-module activity-module" aria-labelledby="activity-title">
+        <div class="dashboard-module-heading"><h3 id="activity-title">Recent activity</h3><span>LAST 5</span></div>
+        <div class="activity-grid">
+          <div>
+            <h4>Attended</h4>
+            <div id="dashboard-attended" class="activity-list"><div class="loading-line"><span class="loading-dot"></span> Loading activity…</div></div>
+          </div>
+          <div>
+            <h4>Hosted</h4>
+            <div id="dashboard-hosted" class="activity-list"><div class="loading-line"><span class="loading-dot"></span> Loading activity…</div></div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <footer class="page-footer"><span>MINISTRY OF CIVIL SERVICES</span><span>Member access requires a linked Roblox account in the MoCS group.</span></footer>
+  </main>
+</body>
+</html>

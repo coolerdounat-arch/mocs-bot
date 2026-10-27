@@ -1,0 +1,14 @@
+source_name,display_label,category,sort_order
+Imperialist Robloxian Federation,Main Rank,main,100
+Imperialist Robloxian Military,Military Rank,mil,102
+Government of the Federation,Government Rank,gov,101
+Ministry of Education,MoE Rank,gov,0
+Ministry of Mass Media and Propaganda,ISKRA Rank,gov,0
+Ministry of Internal Affairs,MoIA Rank,gov,0
+Federal Information and Security Agency,FISA Rank,gov,0
+Ministry of Civil Services,MoCS Rank,gov,0
+Ministry of Labour,MoL Rank,gov,0
+Ministry of Justice, MoJ Rank,gov,0
+Imperial Chancellery, IC Rank,gov,0
+Admissions,MoA Rank,gov,0
+Ministry of Public Health,MoPH Rank,gov,0

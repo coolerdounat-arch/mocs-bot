@@ -1,0 +1,31 @@
+{
+  "name": "discord-profile-bot",
+  "version": "2.0.0",
+  "description": "This bot serves as an internal all-usage-bot for the Ministry of Civil Services!",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=26.12.1"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test",
+    "preview:web": "node scripts/preview-web.js",
+    "deploy": "node src/deploy-commands.js",
+    "add:allowed-user": "node scripts/add-allowed-user.js",
+    "add:log-type": "node scripts/add-log-type.js",
+    "check:linked-users": "node scripts/check-linked-users.js",
+    "backup:user-data": "node scripts/backup-user-data.js",
+    "backup:offsite": "node scripts/backup-offsite.js",
+    "upload:loading-emoji": "node scripts/upload-loading-emoji.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "discord.js": "^14.27.0",
+    "dotenv": "^16.4.5",
+    "googleapis": "^188.0.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true
+  }
+}

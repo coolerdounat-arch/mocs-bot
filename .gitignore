@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+google-service-account.json
+/src/data/config.csv
+/src/data/linked-users.csv
+*.sqlite
+*.sqlite3
+*.db
+*.pem
+*.key
+node_modules/

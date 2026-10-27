@@ -1,0 +1,35 @@
+[Unit]
+Description=Discord Profile Bot (testing, MoCS Test Bot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=discordbot
+WorkingDirectory=/opt/discord-bot(new)
+Environment=NODE_ENV=production
+Environment=PATH=/opt/node-v26.12.1-linux-x64/bin:/usr/local/bin:/usr/bin:/bin
+Environment="BOT_RESTART_COMMAND=/usr/bin/sudo /usr/bin/systemctl restart discord-bot-testing.service"
+ExecStart=/opt/node-v26.12.1-linux-x64/bin/node src/index.js
+Restart=always
+RestartSec=5
+UMask=0077
+ProtectSystem=strict
+ReadWritePaths=/var/lib/mocs-bot /etc/mocs-bot /opt/discord-bot(new)/src/data -/run/sudo -/var/lib/sudo
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target
