@@ -6,7 +6,7 @@ log-event,Public CT,110
 log-event,Recruitment Session,110
 log-event,QnA Session,110
 log-event,Lecture,110
-log-event,Supervision Replacement Test,130
+log-event,Supervision Replacement Test,110
 log-event,NCO Supervision,70
 log-others,CT Ranking,170
 log-others,Extra QP,20
