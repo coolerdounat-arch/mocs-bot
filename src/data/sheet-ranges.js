@@ -12,8 +12,8 @@ const SHEET_RANGES = Object.freeze({
     fsd: Object.freeze({
       spreadsheetId: QP_SHEET_ID,
       entries: "'FSD Database'!F19:L1000",
-      notice: "'FSD Database'!L19:L1000",
-      admins: "'FSD Database'!F8:F9",
+      notice: "'FSD Database'!M19:L1000",
+      admins: "'FSD Database'!F8:F10",
       qpIndex: 2,
       noticeIndex: 6,
     }),
