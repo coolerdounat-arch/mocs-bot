@@ -2,7 +2,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const { EmbedBuilder, MessageFlags, SlashCommandBuilder } = require('discord.js');
 const { isPrivilegedDiscordUser } = require('../services/linkedUsers');
-const { showLoading } = require('../services/loadingScreen');
+const { getLoadingEmoji, showLoading } = require('../services/loadingScreen');
 const {
   completeUpdateNotice,
   removeUpdateNotice,
@@ -48,7 +48,7 @@ function buildUpdateEmbed(status) {
     .setTitle(active ? 'Update in Progress' : 'Last Update')
     .setDescription(status?.message || 'No update has been run yet.')
     .addFields(
-      { name: 'Progress', value: `\`${progressBar}\` **${progress}%**`, inline: false },
+      { name: 'Progress', value: `\`${progressBar}\` ${active ? `${getLoadingEmoji()} ` : ''}**${progress}%**`, inline: false },
       { name: 'State', value: status?.state || 'Not started', inline: true },
       { name: 'Phase', value: status?.phase || '—', inline: true },
       { name: 'Updated', value: status?.updatedAt || '—', inline: true },

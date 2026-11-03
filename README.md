@@ -51,7 +51,7 @@ These commands are restricted to users with the required authorization:
 | Command | What it does |
 | --- | --- |
 | `/restart` | Restarts the bot. |
-| `/update [status]` | Starts the configured bot/server update and edits the original reply with the final result, or shows update status when `status` is `true`. |
+| `/update [status]` | Starts the configured bot/server update and shows animated, step-by-step progress in the original reply, or shows update status when `status` is `true`. |
 | `/system-stats` | Shows bot host and process statistics. |
 | `/cache stats` | Shows lookup cache statistics. |
 | `/cache clear [name]` | Clears a selected lookup cache, or all caches if no name is selected. |

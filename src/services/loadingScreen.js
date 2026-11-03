@@ -33,6 +33,10 @@ function buildLoadingEmbed(client, message = DEFAULT_LOADING_MESSAGE) {
   return embed;
 }
 
+function getLoadingEmoji() {
+  return loadingEmoji || FALLBACK_EMOJI;
+}
+
 function withoutLoadingEmbed(payload) {
   if (typeof payload === 'string') return { content: payload, embeds: [] };
   if (payload instanceof MessagePayload || 'embeds' in payload) return payload;
@@ -52,6 +56,7 @@ async function showLoading(interaction, { message = DEFAULT_LOADING_MESSAGE, eph
 module.exports = {
   LOADING_EMOJI_NAME,
   buildLoadingEmbed,
+  getLoadingEmoji,
   resolveLoadingEmoji,
   showLoading,
   withoutLoadingEmbed,

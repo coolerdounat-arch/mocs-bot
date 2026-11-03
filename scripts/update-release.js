@@ -19,6 +19,10 @@ function run(command, args, cwd) {
   execFileSync(command, args, { cwd, env, stdio: 'inherit' });
 }
 
+function reportProgress(progress, message) {
+  console.log(`MOCS_UPDATE_PROGRESS\t${progress}\t${message}`);
+}
+
 function ensureSafePaths() {
   if (path.resolve(BOT_DIRECTORY) !== '/opt/discord-bot'
     || path.resolve(STAGING_DIRECTORY) !== '/opt/discord-bot.update-staging') {
@@ -54,11 +58,13 @@ function validateRelease() {
 
   try {
     if (testFiles.length) {
+      reportProgress(27, 'Running private release tests.');
       run('npm', ['test'], STAGING_DIRECTORY);
     } else {
       console.warn('No test suite is available; validating JavaScript syntax only.');
     }
 
+    reportProgress(36, 'Checking JavaScript syntax.');
     const sourceFiles = ['src', 'scripts']
       .flatMap((directory) => findJavaScriptFiles(path.join(STAGING_DIRECTORY, directory)));
     if (!sourceFiles.length) {
@@ -67,6 +73,7 @@ function validateRelease() {
     for (const sourceFile of sourceFiles) {
       run(process.execPath, ['--check', sourceFile], STAGING_DIRECTORY);
     }
+    reportProgress(42, 'Release checks passed.');
   } finally {
     if (copiedPrivateTests) fs.rmSync(testDirectory, { recursive: true, force: true });
   }
@@ -83,6 +90,7 @@ function prepareRelease() {
     throw new Error('The staging path must be an empty, real directory.');
   }
   run('git', ['clone', '--depth', '1', '--branch', BRANCH, REPOSITORY_URL, STAGING_DIRECTORY], BOT_DIRECTORY);
+  reportProgress(12, 'Source fetched; preserving server credentials.');
 
   const stagedEnvironmentPath = path.join(STAGING_DIRECTORY, '.env');
   fs.copyFileSync(path.join(BOT_DIRECTORY, '.env'), stagedEnvironmentPath);
@@ -95,6 +103,7 @@ function prepareRelease() {
   }
 
   run('npm', ['ci'], STAGING_DIRECTORY);
+  reportProgress(22, 'Dependencies installed; preparing release checks.');
   validateRelease();
 }
 

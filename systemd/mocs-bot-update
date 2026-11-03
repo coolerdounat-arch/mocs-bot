@@ -14,6 +14,7 @@ RELEASE_PROMOTED=0
 RELEASE_HEALTHY=0
 SERVICE_STOPPED=0
 CURRENT_PROGRESS=0
+HEALTH_CHECK_FAILURE=
 
 write_status() {
   local state=$1
@@ -50,7 +51,12 @@ update_error() {
     fi
   fi
   printf 'Updater failed during phase %s with exit code %s.\n' "$failed_phase" "$code" >&2
-  write_status failed "$failed_phase" "Update failed during ${failed_phase} with exit code ${code}. The system journal contains details."
+  local failure_message="Update failed during ${failed_phase} with exit code ${code}. The system journal contains details."
+  if [[ -n "$HEALTH_CHECK_FAILURE" ]]; then
+    failure_message="$HEALTH_CHECK_FAILURE The previous release was restored; see the system journal for details."
+    printf '%s\n' "$HEALTH_CHECK_FAILURE" >&2
+  fi
+  write_status failed "$failed_phase" "$failure_message"
   exit "$code"
 }
 
@@ -95,7 +101,22 @@ if [[ -e "$STAGING_DIRECTORY" || -L "$STAGING_DIRECTORY" ]]; then
 fi
 install -d -o discordbot -g discordbot -m 750 "$STAGING_DIRECTORY"
 install -d -o discordbot -g discordbot -m 750 "$NPM_CACHE_DIRECTORY"
-runuser -u discordbot -- "$NODE" "$RUNNER" prepare
+if runuser -u discordbot -- "$NODE" "$RUNNER" prepare 2>&1 | while IFS= read -r line; do
+  if [[ "$line" == $'MOCS_UPDATE_PROGRESS\t'* ]]; then
+    IFS=$'\t' read -r marker progress message <<< "$line"
+    if [[ "$progress" =~ ^[0-9]+$ ]]; then
+      write_status running prepare "$message" "$progress"
+    else
+      printf '%s\n' "$line"
+    fi
+  else
+    printf '%s\n' "$line"
+  fi
+done; then
+  :
+else
+  exit $?
+fi
 if [[ -L "$STAGING_DIRECTORY" || ! -d "$STAGING_DIRECTORY" || ! -f "$STAGING_DIRECTORY/package.json" || ! -d "$STAGING_DIRECTORY/node_modules" ]]; then
   write_status failed prepare "The staged release is incomplete; the live bot was not changed."
   exit 1
@@ -105,7 +126,6 @@ CURRENT_PHASE=promote
 CURRENT_PROGRESS=45
 write_status running "$CURRENT_PHASE" "Promoting the tested release." "$CURRENT_PROGRESS"
 RELEASE_BACKUP="${BOT_DIRECTORY}.rollback.$(date -u +%Y%m%dT%H%M%S%N)"
-before_restarts=$(systemctl show --property=NRestarts --value "$SERVICE")
 systemctl stop "$SERVICE"
 SERVICE_STOPPED=1
 mv "$BOT_DIRECTORY" "$RELEASE_BACKUP"
@@ -113,16 +133,25 @@ mv "$STAGING_DIRECTORY" "$BOT_DIRECTORY"
 RELEASE_PROMOTED=1
 systemctl start "$SERVICE"
 SERVICE_STOPPED=0
+health_check_restarts=$(systemctl show --property=NRestarts --value "$SERVICE")
 
 CURRENT_PHASE=health-check
 CURRENT_PROGRESS=60
-write_status running "$CURRENT_PHASE" "Checking the updated bot and deploying slash commands." "$CURRENT_PROGRESS"
-sleep 30
-after_restarts=$(systemctl show --property=NRestarts --value "$SERVICE")
-if ! systemctl is-active --quiet "$SERVICE" || [[ "$before_restarts" != "$after_restarts" ]]; then
-  CURRENT_PHASE=health-check
-  false
-fi
+write_status running "$CURRENT_PHASE" "Checking that the updated bot stays healthy." "$CURRENT_PROGRESS"
+for health_check_elapsed in 5 10 15 20 25 30; do
+  sleep 5
+  if ! systemctl is-active --quiet "$SERVICE"; then
+    HEALTH_CHECK_FAILURE="The updated bot service became inactive during the health check."
+    false
+  fi
+  current_restarts=$(systemctl show --property=NRestarts --value "$SERVICE")
+  if [[ "$health_check_restarts" != "$current_restarts" ]]; then
+    HEALTH_CHECK_FAILURE="The updated bot service restarted during the health check."
+    false
+  fi
+  CURRENT_PROGRESS=$((60 + health_check_elapsed / 3))
+  write_status running "$CURRENT_PHASE" "The updated bot is healthy; verifying stability (${health_check_elapsed}/30 seconds)." "$CURRENT_PROGRESS"
+done
 
 CURRENT_PHASE=deploy
 CURRENT_PROGRESS=75
