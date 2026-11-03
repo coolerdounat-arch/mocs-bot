@@ -23,13 +23,14 @@ write_status() {
   local temporary
   temporary=$(mktemp /run/mocs-bot-update-status.XXXXXX)
   printf 'state=%s\nphase=%s\nupdatedAt=%s\nmessage=%s\nprogress=%s\n' \
-    "$state" "$phase" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$message" "$progress" > "$temporary"
+    "$state" "$phase" "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" "$message" "$progress" > "$temporary"
   chmod 644 "$temporary"
   mv -f "$temporary" "$STATUS_FILE"
 }
 
 update_error() {
   local code=$?
+  local failed_phase=${CURRENT_PHASE:-unknown}
   trap - ERR
   if [[ "$RELEASE_PROMOTED" -eq 1 && "$RELEASE_HEALTHY" -eq 0 ]]; then
     if ! rollback_release; then
@@ -48,7 +49,8 @@ update_error() {
       exit 1
     fi
   fi
-  write_status failed "${CURRENT_PHASE:-unknown}" "Update failed with exit code ${code}. The system journal contains details."
+  printf 'Updater failed during phase %s with exit code %s.\n' "$failed_phase" "$code" >&2
+  write_status failed "$failed_phase" "Update failed during ${failed_phase} with exit code ${code}. The system journal contains details."
   exit "$code"
 }
 

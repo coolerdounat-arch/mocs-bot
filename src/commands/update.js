@@ -3,6 +3,11 @@ const fs = require('fs');
 const { EmbedBuilder, MessageFlags, SlashCommandBuilder } = require('discord.js');
 const { isPrivilegedDiscordUser } = require('../services/linkedUsers');
 const { showLoading } = require('../services/loadingScreen');
+const {
+  completeUpdateNotice,
+  removeUpdateNotice,
+  saveUpdateNotice,
+} = require('../services/updateNotice');
 
 const UPDATE_SERVICE = 'mocs-bot-update.service';
 const UPDATE_HELPER = '/usr/local/sbin/mocs-bot-update';
@@ -119,10 +124,12 @@ async function execute(interaction) {
   }
 
   try {
+    saveUpdateNotice(interaction, status?.updatedAt);
     await interaction.setLoadingMessage('Starting the updater service...');
     await startUpdateJob();
   } catch (err) {
     console.error('[update] Could not start updater service:', err);
+    removeUpdateNotice(interaction.applicationId);
     return interaction.editReply({
       content: 'The update job could not be started. Check the bot service journal and updater permissions.',
     });
@@ -136,7 +143,10 @@ async function execute(interaction) {
     if (statusChanged(currentStatus, previousStatus)) {
       previousStatus = currentStatus;
       if (currentStatus.state !== 'running') {
-        if (canEditReply) return interaction.editReply({ embeds: [buildUpdateEmbed(currentStatus)] });
+        if (canEditReply) {
+          await completeUpdateNotice(interaction.client);
+          return;
+        }
         return;
       }
       if (canEditReply) {
@@ -150,13 +160,9 @@ async function execute(interaction) {
       }
     } else if (Date.now() - startTime >= UPDATE_START_TIMEOUT_MS) {
       if (canEditReply) {
-        return interaction.editReply({
-          content: 'The updater did not report progress in time. Check `/update status:true` or the updater service journal.',
-        });
+        console.warn('[update] The updater has not reported a status change yet; the completion watcher will continue.');
+        return;
       }
-      return;
-    } else if (canEditReply) {
-      await interaction.setLoadingMessage('Waiting for the updater to report its first progress...');
     }
 
     await sleep(UPDATE_POLL_INTERVAL_MS);

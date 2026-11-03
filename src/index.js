@@ -21,6 +21,7 @@ const { checkCommandCooldown } = require('./services/commandCooldowns');
 const { checkCommandAccess, leaveIfUnauthorizedGuild } = require('./services/commandAccess');
 const { resolveLoadingEmoji } = require('./services/loadingScreen');
 const { completeRestartNotice } = require('./services/restartNotice');
+const { startUpdateNoticeWatcher } = require('./services/updateNotice');
 const { checkLinkedUsers } = require('./services/linkedUserChecker');
 const { handleWebInterface } = require('./services/webInterface');
 
@@ -111,6 +112,7 @@ client.once('clientReady', () => {
   updatePresence();
   resolveLoadingEmoji(client);
   completeRestartNotice(client).catch((err) => console.warn('[restart] Could not update the restart message:', err.message || err));
+  startUpdateNoticeWatcher(client);
   for (const guild of client.guilds.cache.values()) {
     leaveIfUnauthorizedGuild(guild).catch((err) => console.error(`[command-access] Could not leave guild ${guild.id}:`, err));
   }
