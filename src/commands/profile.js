@@ -60,6 +60,17 @@ async function execute(interaction) {
 
   const canonicalUsername = robloxUser.name;
 
+  let userInfo = null;
+  try {
+    userInfo = await getRobloxUserById(robloxUser.id);
+  } catch (err) {
+    console.error('Roblox account details fetch failed:', err);
+  }
+  const createdAt = userInfo?.created ? new Date(userInfo.created) : null;
+  const accountAgeDays = createdAt && !Number.isNaN(createdAt.getTime())
+    ? Math.floor((Date.now() - createdAt.getTime()) / (24 * 60 * 60 * 1000))
+    : null;
+
   let rows;
   try {
     rows = await getQuotaLogRows();
@@ -115,6 +126,8 @@ async function execute(interaction) {
     .setDescription(`**Information on ${canonicalUsername}**`)
     .addFields(
       ...rankFields,
+      { name: 'User ID', value: `\`${String(robloxUser.id)}\``, inline: true },
+      { name: 'Account Age', value: accountAgeDays === null ? 'Unknown' : `${accountAgeDays} days`, inline: true },
       { name: '■▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬■', value: '\u200b', inline: false },
       { name: 'Last 3 Events Attended', value: attendedText, inline: false },
       { name: 'Last 3 Events Hosted', value: hostedText, inline: false }

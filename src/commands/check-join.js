@@ -12,6 +12,7 @@ const { getMocsBlacklistRows, normalizeMatch } = require('../services/googleShee
 const { serialToDate } = require('../utils/format');
 const { getNumericConfigValue } = require('../services/configuration');
 const { showLoading } = require('../services/loadingScreen');
+const { buildEligibilityRetryEmbed } = require('../utils/eligibility');
 
 const COLOR_ALLOWED = 0x00ff00;
 const COLOR_DENIED = 0xff0000;
@@ -65,20 +66,28 @@ function box(kind, text, highlights = []) {
 
 function loadEnemyGroups() {
   const csvPath = path.join(__dirname, '../data/enemy-groups.csv');
-  if (!fs.existsSync(csvPath)) return [];
+  if (!fs.existsSync(csvPath)) throw new Error('Enemy groups data file is missing.');
 
-  return fs.readFileSync(csvPath, 'utf8')
+  const lines = fs.readFileSync(csvPath, 'utf8')
     .trim()
     .split(/\r?\n/)
-    .slice(1)
-    .filter(Boolean)
-    .map((line) => {
-      const [rawGroupId, ...rest] = line.split(',');
-      const groupId = Number(rawGroupId);
-      const groupName = rest.join(',').trim();
-      return Number.isFinite(groupId) && groupName ? { groupId, groupName } : null;
-    })
     .filter(Boolean);
+
+  if (lines.length <= 1) throw new Error('Enemy groups data file has no configured groups.');
+  const [groupIdHeader, groupNameHeader] = lines[0].split(',').map((value) => value.trim().toLowerCase());
+  if (groupIdHeader !== 'group_id' || groupNameHeader !== 'group_name') {
+    throw new Error('Enemy groups data file has an invalid header.');
+  }
+
+  return lines.slice(1).map((line) => {
+    const [rawGroupId, ...rest] = line.split(',');
+    const groupId = Number(rawGroupId);
+    const groupName = rest.join(',').trim();
+    if (!Number.isFinite(groupId) || !groupName) {
+      throw new Error('Enemy groups data file contains an invalid entry.');
+    }
+    return { groupId, groupName };
+  });
 }
 
 function findBlacklistEntry(rows, names) {
@@ -107,7 +116,9 @@ async function execute(interaction) {
     robloxUser = await getRobloxUser(target);
   } catch (err) {
     console.error('Roblox lookup failed:', err);
-    return interaction.editReply('Something went wrong looking that user up on Roblox. Please try again in a moment.');
+    return interaction.editReply({
+      embeds: [buildEligibilityRetryEmbed('check-join', target, ['Roblox username lookup could not be verified.'])],
+    });
   }
 
   if (!robloxUser) return interaction.editReply(`${target} does not exist`);
@@ -132,8 +143,17 @@ async function execute(interaction) {
   const mocsRole = findGroupRole(groupRoles, mocsGroupId);
   const createdAt = userInfo?.created ? new Date(userInfo.created) : null;
   const accountAgeDays = createdAt && !Number.isNaN(createdAt.getTime()) ? daysSince(createdAt) : null;
+  if (accountAgeDays === null || accountAgeDays < 0) {
+    verificationErrors.push('Roblox account age could not be verified.');
+  }
   const ageOk = accountAgeDays !== null && accountAgeDays > 60;
-  const enemyGroups = loadEnemyGroups();
+  let enemyGroups = [];
+  try {
+    enemyGroups = loadEnemyGroups();
+  } catch (err) {
+    console.error('Enemy group data could not be loaded:', err);
+    verificationErrors.push('Enemy group membership could not be verified.');
+  }
   const userGroupIds = new Set(groupRoles.map((entry) => Number(entry?.group?.id)).filter(Number.isFinite));
   const enemyGroupMatch = enemyGroups.find((enemy) => userGroupIds.has(enemy.groupId)) || null;
 
@@ -146,11 +166,13 @@ async function execute(interaction) {
     verificationErrors.push('Blacklist status could not be verified.');
   }
 
+  if (verificationErrors.length) {
+    return interaction.editReply({
+      embeds: [buildEligibilityRetryEmbed('check-join', robloxUser.name, verificationErrors)],
+    });
+  }
+
   const checks = [
-    {
-      passed: verificationErrors.length === 0,
-      failure: verificationErrors.length ? `Eligibility could not be verified: ${[...new Set(verificationErrors)].join(' ')}` : null,
-    },
     {
       passed: !blacklisted,
       failure: blacklisted

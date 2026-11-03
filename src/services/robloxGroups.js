@@ -54,7 +54,16 @@ async function loadUserGroupRoles(userId) {
     { label: 'Roblox group roles lookup' }
   );
   const data = await res.json();
-  return data.data || [];
+  if (!Array.isArray(data?.data)) throw new Error('Roblox group roles response was incomplete.');
+  if (data.data.some((entry) => (
+    !Number.isFinite(Number(entry?.group?.id))
+    || !entry?.role
+    || typeof entry.role.name !== 'string'
+    || !Number.isFinite(Number(entry.role.rank))
+  ))) {
+    throw new Error('Roblox group roles response contained incomplete membership data.');
+  }
+  return data.data;
 }
 
 function getGroupRoles(groupId) {
@@ -68,7 +77,9 @@ async function loadGroupRoles(groupId) {
     { label: 'Roblox group roles (by group) lookup' }
   );
   const data = await res.json();
-  return data.roles || data.data || [];
+  const roles = data?.roles ?? data?.data;
+  if (!Array.isArray(roles)) throw new Error('Roblox group roles response was incomplete.');
+  return roles;
 }
 
 module.exports = { getUserGroupRoles, getGroupRoles };

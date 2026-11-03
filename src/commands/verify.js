@@ -15,20 +15,28 @@ const data = new SlashCommandBuilder()
 
 function loadEnemyGroups() {
   const csvPath = path.join(__dirname, '../data/enemy-groups.csv');
-  if (!fs.existsSync(csvPath)) return [];
+  if (!fs.existsSync(csvPath)) throw new Error('Enemy groups data file is missing.');
 
-  return fs.readFileSync(csvPath, 'utf8')
+  const lines = fs.readFileSync(csvPath, 'utf8')
     .trim()
     .split(/\r?\n/)
-    .slice(1)
-    .filter(Boolean)
-    .map((line) => {
-      const [rawGroupId, ...rest] = line.split(',');
-      const groupId = Number(rawGroupId);
-      const groupName = rest.join(',').trim();
-      return Number.isFinite(groupId) && groupName ? { groupId, groupName } : null;
-    })
     .filter(Boolean);
+
+  if (lines.length <= 1) throw new Error('Enemy groups data file has no configured groups.');
+  const [groupIdHeader, groupNameHeader] = lines[0].split(',').map((value) => value.trim().toLowerCase());
+  if (groupIdHeader !== 'group_id' || groupNameHeader !== 'group_name') {
+    throw new Error('Enemy groups data file has an invalid header.');
+  }
+
+  return lines.slice(1).map((line) => {
+    const [rawGroupId, ...rest] = line.split(',');
+    const groupId = Number(rawGroupId);
+    const groupName = rest.join(',').trim();
+    if (!Number.isFinite(groupId) || !groupName) {
+      throw new Error('Enemy groups data file contains an invalid entry.');
+    }
+    return { groupId, groupName };
+  });
 }
 
 function findBlacklistEntry(rows, names) {
@@ -91,10 +99,20 @@ async function verifyLinkedUser(discordId, guildId, robloxUser, client) {
   const accountAgeDays = createdAt && !Number.isNaN(createdAt.getTime())
     ? Math.floor((Date.now() - createdAt.getTime()) / (24 * 60 * 60 * 1000))
     : null;
-  if (accountAgeDays === null || accountAgeDays <= 60) return 'You do not meet the account age requirement.';
+  if (accountAgeDays === null || accountAgeDays < 0) {
+    return 'Your account age could not be verified. Please try again shortly.';
+  }
+  if (accountAgeDays <= 60) return 'You do not meet the account age requirement.';
 
   const userGroupIds = new Set(groupRoles.map((entry) => Number(entry?.group?.id)).filter(Number.isFinite));
-  if (loadEnemyGroups().some((enemy) => userGroupIds.has(enemy.groupId))) return 'You are currently ineligible to verify.';
+  let enemyGroups;
+  try {
+    enemyGroups = loadEnemyGroups();
+  } catch (err) {
+    console.error('Enemy group data could not be loaded:', err);
+    return 'Eligibility could not be verified because enemy group data is unavailable. Please try again shortly.';
+  }
+  if (enemyGroups.some((enemy) => userGroupIds.has(enemy.groupId))) return 'You are currently ineligible to verify.';
 
   let blacklistRows;
   try {

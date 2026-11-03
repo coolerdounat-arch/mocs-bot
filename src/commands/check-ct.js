@@ -7,6 +7,7 @@ const { getQuotaLogRows, getBlacklistRows, normalizeMatch } = require('../servic
 const { serialToDate } = require('../utils/format');
 const { getNumericConfigValue } = require('../services/configuration');
 const { showLoading } = require('../services/loadingScreen');
+const { buildEligibilityRetryEmbed } = require('../utils/eligibility');
 
 const COLOR_ALLOWED = 0x00ff00;
 const COLOR_LIMITED = 0xffcc00;
@@ -83,7 +84,7 @@ function loadEnemyGroups() {
   const csvPath = path.join(__dirname, '../data/enemy-groups.csv');
 
   if (!fs.existsSync(csvPath)) {
-    return [];
+    throw new Error('Enemy groups data file is missing.');
   }
 
   const lines = fs.readFileSync(csvPath, 'utf8')
@@ -92,7 +93,12 @@ function loadEnemyGroups() {
     .filter(Boolean);
 
   if (lines.length <= 1) {
-    return [];
+    throw new Error('Enemy groups data file has no configured groups.');
+  }
+
+  const [groupIdHeader, groupNameHeader] = lines[0].split(',').map((value) => value.trim().toLowerCase());
+  if (groupIdHeader !== 'group_id' || groupNameHeader !== 'group_name') {
+    throw new Error('Enemy groups data file has an invalid header.');
   }
 
   return lines.slice(1).map((line) => {
@@ -101,11 +107,11 @@ function loadEnemyGroups() {
     const groupId = Number(rawGroupId);
 
     if (!Number.isFinite(groupId) || !groupName) {
-      return null;
+      throw new Error('Enemy groups data file contains an invalid entry.');
     }
 
     return { groupId, groupName };
-  }).filter(Boolean);
+  });
 }
 
 async function execute(interaction) {
@@ -121,7 +127,9 @@ async function execute(interaction) {
     robloxUser = await getRobloxUser(target);
   } catch (err) {
     console.error('Roblox lookup failed:', err);
-    return interaction.editReply('Something went wrong looking that user up on Roblox. Please try again in a moment.');
+    return interaction.editReply({
+      embeds: [buildEligibilityRetryEmbed('check-ct', target, ['Roblox username lookup could not be verified.'])],
+    });
   }
 
   if (!robloxUser) {
@@ -149,7 +157,12 @@ async function execute(interaction) {
   }
 
   const createdAt = userInfo?.created ? new Date(userInfo.created) : null;
-  const accountAgeDays = createdAt ? Math.floor((Date.now() - createdAt.getTime()) / (24 * 60 * 60 * 1000)) : null;
+  const accountAgeDays = createdAt && !Number.isNaN(createdAt.getTime())
+    ? Math.floor((Date.now() - createdAt.getTime()) / (24 * 60 * 60 * 1000))
+    : null;
+  if (accountAgeDays === null || accountAgeDays < 0) {
+    verificationErrors.push('Roblox account age could not be verified.');
+  }
   const ageOk = accountAgeDays !== null && accountAgeDays >= 60;
 
   let groupRoles = [];
@@ -223,7 +236,8 @@ async function execute(interaction) {
     enemyGroupMatch = enemyGroups.find((enemy) => userGroupIds.has(enemy.groupId)) || null;
     isInEnemy = Boolean(enemyGroupMatch);
   } catch (err) {
-    console.error('Enemy group CSV fetch failed:', err);
+    console.error('Enemy group data could not be loaded:', err);
+    verificationErrors.push('Enemy group membership could not be verified.');
   }
 
   let lastAttempt = null;
@@ -238,6 +252,12 @@ async function execute(interaction) {
     verificationErrors.push('Recent Citizenship Test history could not be verified.');
   }
 
+  if (verificationErrors.length) {
+    return interaction.editReply({
+      embeds: [buildEligibilityRetryEmbed('check-ct', robloxUser.name, verificationErrors)],
+    });
+  }
+
   const now = Date.now();
   let lastAttemptWithin24h = false;
   if (lastAttempt && typeof lastAttempt.timestampSerial === 'number') {
@@ -247,11 +267,6 @@ async function execute(interaction) {
 
   let allowedNow = true;
   const reasonNotes = [];
-  if (verificationErrors.length) {
-    allowedNow = false;
-    reasonNotes.push(`Eligibility could not be verified: ${[...new Set(verificationErrors)].join(' ')}`);
-  }
-
   if (!inIRF) {
     allowedNow = false;
     reasonNotes.push('User is not in the IRF main server.');
@@ -416,6 +431,11 @@ async function execute(interaction) {
       {
         name: 'MoCS Rank',
         value: String(mocsRankName),
+        inline: true,
+      },
+      {
+        name: 'Account Age',
+        value: accountAgeDays === null ? 'Unknown' : `${accountAgeDays} days`,
         inline: true,
       },
       {
