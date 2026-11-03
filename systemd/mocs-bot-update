@@ -7,6 +7,7 @@ SERVICE=discord-bot.service
 STATUS_FILE=/var/lib/mocs-bot/update-status
 NODE=/opt/node-v26.12.1-linux-x64/bin/node
 RUNNER=/opt/discord-bot/scripts/update-release.js
+NPM_CACHE_DIRECTORY=/var/cache/mocs-bot-npm
 LOCK_FILE=/run/mocs-bot-update.lock
 RELEASE_BACKUP=
 RELEASE_PROMOTED=0
@@ -91,6 +92,7 @@ if [[ -e "$STAGING_DIRECTORY" || -L "$STAGING_DIRECTORY" ]]; then
   rm -rf -- "$STAGING_DIRECTORY"
 fi
 install -d -o discordbot -g discordbot -m 750 "$STAGING_DIRECTORY"
+install -d -o discordbot -g discordbot -m 750 "$NPM_CACHE_DIRECTORY"
 runuser -u discordbot -- "$NODE" "$RUNNER" prepare
 if [[ -L "$STAGING_DIRECTORY" || ! -d "$STAGING_DIRECTORY" || ! -f "$STAGING_DIRECTORY/package.json" || ! -d "$STAGING_DIRECTORY/node_modules" ]]; then
   write_status failed prepare "The staged release is incomplete; the live bot was not changed."
