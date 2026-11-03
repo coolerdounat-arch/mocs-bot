@@ -274,7 +274,7 @@ fi
 printf '%s\n' "$release_check"
 if grep -Eqi "New release ['\"].* available" <<< "$release_check"; then
   do-release-upgrade -f DistUpgradeViewNonInteractive
-elif grep -Eqi 'No new release found' <<< "$release_check"; then
+elif grep -Eqi 'No new release found|There is no development version of an LTS available' <<< "$release_check"; then
   :
 elif [[ "$release_check_status" -ne 0 ]]; then
   printf 'Ubuntu release check failed with exit code %s.\n' "$release_check_status" >&2
