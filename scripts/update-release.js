@@ -4,8 +4,8 @@ const path = require('path');
 
 const REPOSITORY_URL = 'https://github.com/coolerdounat-arch/mocs-bot.git';
 const BRANCH = 'main';
-const BOT_DIRECTORY = '/opt/discord-bot';
-const STAGING_DIRECTORY = '/opt/discord-bot.update-staging';
+const BOT_DIRECTORY = '/opt/discord-bot(new)';
+const STAGING_DIRECTORY = '/opt/discord-bot(new).update-staging';
 const NPM_CACHE_DIRECTORY = '/var/cache/mocs-bot-npm';
 const NODE_DIRECTORY = path.dirname(process.execPath);
 const env = {
@@ -23,8 +23,8 @@ function reportProgress(progress, message) {
 }
 
 function ensureSafePaths() {
-  if (path.resolve(BOT_DIRECTORY) !== '/opt/discord-bot'
-    || path.resolve(STAGING_DIRECTORY) !== '/opt/discord-bot.update-staging') {
+  if (path.resolve(BOT_DIRECTORY) !== '/opt/discord-bot(new)'
+    || path.resolve(STAGING_DIRECTORY) !== '/opt/discord-bot(new).update-staging') {
     throw new Error('Updater paths did not match the configured deployment paths.');
   }
 }

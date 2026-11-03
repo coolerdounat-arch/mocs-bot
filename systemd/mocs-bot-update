@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-BOT_DIRECTORY=/opt/discord-bot
-STAGING_DIRECTORY=/opt/discord-bot.update-staging
-SERVICE=discord-bot.service
+BOT_DIRECTORY='/opt/discord-bot(new)'
+STAGING_DIRECTORY='/opt/discord-bot(new).update-staging'
+FALLBACK_DIRECTORY=/opt/discord-bot-fallback
+FALLBACK_STAGING=
+FALLBACK_BACKUP=
+SERVICE=discord-bot-testing.service
 STATUS_FILE=/var/lib/mocs-bot/update-status
 NODE=/opt/node-v26.12.1-linux-x64/bin/node
 RUNNER=/usr/local/libexec/mocs-bot-update-release.js
@@ -32,6 +35,7 @@ write_status() {
 update_error() {
   local code=$?
   local failed_phase=${CURRENT_PHASE:-unknown}
+  local failed_command=${BASH_COMMAND:-unknown command}
   trap - ERR
   if [[ "$RELEASE_PROMOTED" -eq 1 && "$RELEASE_HEALTHY" -eq 0 ]]; then
     if ! rollback_release; then
@@ -50,11 +54,26 @@ update_error() {
       exit 1
     fi
   fi
+  if [[ -n "$FALLBACK_STAGING" && -d "$FALLBACK_STAGING" && ! -L "$FALLBACK_STAGING" ]]; then
+    rm -rf -- "$FALLBACK_STAGING"
+  fi
+  if [[ -n "$FALLBACK_BACKUP" && -d "$FALLBACK_BACKUP" && ! -e "$FALLBACK_DIRECTORY" ]]; then
+    if ! mv "$FALLBACK_BACKUP" "$FALLBACK_DIRECTORY"; then
+      write_status failed fallback "Fallback refresh failed and the previous fallback could not be restored; administrator recovery is required."
+      exit 1
+    fi
+  fi
   printf 'Updater failed during phase %s with exit code %s.\n' "$failed_phase" "$code" >&2
   local failure_message="Update failed during ${failed_phase} with exit code ${code}. The system journal contains details."
   if [[ -n "$HEALTH_CHECK_FAILURE" ]]; then
     failure_message="$HEALTH_CHECK_FAILURE The previous release was restored; see the system journal for details."
     printf '%s\n' "$HEALTH_CHECK_FAILURE" >&2
+  elif [[ "$failed_phase" == health-check ]]; then
+    HEALTH_CHECK_FAILURE="Health check command failed with exit code ${code}: ${failed_command}"
+    failure_message="$HEALTH_CHECK_FAILURE The previous release was restored; see the system journal for details."
+    printf '%s\n' "$HEALTH_CHECK_FAILURE" >&2
+  elif [[ "$failed_phase" == fallback ]]; then
+    failure_message="The newer bot is healthy, but refreshing ${FALLBACK_DIRECTORY} failed. The previous fallback was preserved; see the updater journal."
   fi
   write_status failed "$failed_phase" "$failure_message"
   exit "$code"
@@ -70,6 +89,50 @@ rollback_release() {
   RELEASE_PROMOTED=0
   systemctl start "$SERVICE" || return 1
   runuser -u discordbot -- "$NODE" "$RUNNER" deploy-rollback "$BOT_DIRECTORY" || return 1
+}
+
+refresh_fallback() {
+  local timestamp
+  timestamp=$(date -u +%Y%m%dT%H%M%S%N)
+  FALLBACK_STAGING="${FALLBACK_DIRECTORY}.staging.$$"
+  FALLBACK_BACKUP="${FALLBACK_DIRECTORY}.previous.${timestamp}"
+
+  if [[ -L "$FALLBACK_DIRECTORY" || ( -e "$FALLBACK_DIRECTORY" && ! -d "$FALLBACK_DIRECTORY" ) ]]; then
+    printf 'Fallback path is not a real directory: %s\n' "$FALLBACK_DIRECTORY" >&2
+    return 1
+  fi
+  if [[ -e "$FALLBACK_STAGING" || -L "$FALLBACK_STAGING" ]]; then
+    printf 'Fallback staging path already exists: %s\n' "$FALLBACK_STAGING" >&2
+    return 1
+  fi
+
+  install -d -o discordbot -g discordbot -m 750 "$FALLBACK_STAGING"
+  cp -a "$BOT_DIRECTORY/." "$FALLBACK_STAGING/"
+  chown -R discordbot:discordbot "$FALLBACK_STAGING"
+  chmod 750 "$FALLBACK_STAGING"
+  if [[ -f "$FALLBACK_STAGING/.env" ]]; then
+    chmod 600 "$FALLBACK_STAGING/.env"
+  fi
+  if [[ -f "$FALLBACK_STAGING/google-service-account.json" ]]; then
+    chmod 600 "$FALLBACK_STAGING/google-service-account.json"
+  fi
+  if [[ ! -f "$FALLBACK_STAGING/package.json" || ! -d "$FALLBACK_STAGING/node_modules" ]]; then
+    printf 'The verified release could not be copied completely to the fallback.\n' >&2
+    return 1
+  fi
+
+  if [[ -d "$FALLBACK_DIRECTORY" ]]; then
+    mv "$FALLBACK_DIRECTORY" "$FALLBACK_BACKUP"
+  else
+    FALLBACK_BACKUP=
+  fi
+  if ! mv "$FALLBACK_STAGING" "$FALLBACK_DIRECTORY"; then
+    if [[ -n "$FALLBACK_BACKUP" && ! -e "$FALLBACK_DIRECTORY" ]]; then
+      mv "$FALLBACK_BACKUP" "$FALLBACK_DIRECTORY" || return 1
+    fi
+    return 1
+  fi
+  FALLBACK_STAGING=
 }
 
 trap update_error ERR
@@ -90,6 +153,11 @@ fi
 service_exec_start=$(systemctl show --property=ExecStart --value "$SERVICE")
 if [[ "$service_exec_start" != *"$NODE"* ]]; then
   write_status failed preflight "Install the reviewed Node 26 systemd unit before using /update; no changes were made."
+  exit 1
+fi
+service_working_directory=$(systemctl show --property=WorkingDirectory --value "$SERVICE")
+if [[ "$service_working_directory" != "$BOT_DIRECTORY" ]]; then
+  write_status failed preflight "The testing service does not use the newer bot directory; no changes were made."
   exit 1
 fi
 
@@ -145,10 +213,16 @@ health_check_state=unknown
 health_check_main_pid=0
 write_status running "$CURRENT_PHASE" "Waiting for the updated bot to stay healthy." 60
 while (( health_check_elapsed < HEALTH_CHECK_TIMEOUT_SECONDS && health_check_stable < HEALTH_CHECK_STABLE_SECONDS )); do
-  sleep 5
+  sleep "$HEALTH_CHECK_POLL_SECONDS"
   health_check_elapsed=$((health_check_elapsed + HEALTH_CHECK_POLL_SECONDS))
-  health_check_state=$(systemctl show --property=ActiveState --value "$SERVICE")
-  health_check_main_pid=$(systemctl show --property=MainPID --value "$SERVICE")
+  if ! health_check_state=$(systemctl show --property=ActiveState --value "$SERVICE"); then
+    HEALTH_CHECK_FAILURE="Could not read the updated bot service state during the health check."
+    false
+  fi
+  if ! health_check_main_pid=$(systemctl show --property=MainPID --value "$SERVICE"); then
+    HEALTH_CHECK_FAILURE="Could not read the updated bot main process during the health check."
+    false
+  fi
   if [[ "$health_check_state" == active && "$health_check_main_pid" =~ ^[1-9][0-9]*$ ]]; then
     if [[ "$health_check_main_pid" == "$health_check_pid" ]]; then
       health_check_stable=$((health_check_stable + HEALTH_CHECK_POLL_SECONDS))
@@ -174,6 +248,11 @@ write_status running "$CURRENT_PHASE" "Deploying slash commands." "$CURRENT_PROG
 runuser -u discordbot -- "$NODE" "$RUNNER" deploy-current
 RELEASE_HEALTHY=1
 RELEASE_PROMOTED=0
+
+CURRENT_PHASE=fallback
+CURRENT_PROGRESS=80
+write_status running "$CURRENT_PHASE" "Refreshing the fallback from the verified newer bot." "$CURRENT_PROGRESS"
+refresh_fallback
 
 CURRENT_PHASE=ubuntu-upgrade
 CURRENT_PROGRESS=85
