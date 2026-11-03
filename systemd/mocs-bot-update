@@ -12,15 +12,17 @@ RELEASE_BACKUP=
 RELEASE_PROMOTED=0
 RELEASE_HEALTHY=0
 SERVICE_STOPPED=0
+CURRENT_PROGRESS=0
 
 write_status() {
   local state=$1
   local phase=$2
   local message=$3
+  local progress=${4:-$CURRENT_PROGRESS}
   local temporary
   temporary=$(mktemp /run/mocs-bot-update-status.XXXXXX)
-  printf 'state=%s\nphase=%s\nupdatedAt=%s\nmessage=%s\n' \
-    "$state" "$phase" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$message" > "$temporary"
+  printf 'state=%s\nphase=%s\nupdatedAt=%s\nmessage=%s\nprogress=%s\n' \
+    "$state" "$phase" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$message" "$progress" > "$temporary"
   chmod 644 "$temporary"
   mv -f "$temporary" "$STATUS_FILE"
 }
@@ -83,7 +85,8 @@ if [[ "$service_exec_start" != *"$NODE"* ]]; then
 fi
 
 CURRENT_PHASE=prepare
-write_status running "$CURRENT_PHASE" "Fetching main, installing dependencies, and running tests."
+CURRENT_PROGRESS=5
+write_status running "$CURRENT_PHASE" "Fetching main, installing dependencies, and running tests." "$CURRENT_PROGRESS"
 if [[ -e "$STAGING_DIRECTORY" || -L "$STAGING_DIRECTORY" ]]; then
   rm -rf -- "$STAGING_DIRECTORY"
 fi
@@ -95,7 +98,8 @@ if [[ -L "$STAGING_DIRECTORY" || ! -d "$STAGING_DIRECTORY" || ! -f "$STAGING_DIR
 fi
 
 CURRENT_PHASE=promote
-write_status running "$CURRENT_PHASE" "Promoting the tested release."
+CURRENT_PROGRESS=45
+write_status running "$CURRENT_PHASE" "Promoting the tested release." "$CURRENT_PROGRESS"
 RELEASE_BACKUP="${BOT_DIRECTORY}.rollback.$(date -u +%Y%m%dT%H%M%S%N)"
 before_restarts=$(systemctl show --property=NRestarts --value "$SERVICE")
 systemctl stop "$SERVICE"
@@ -107,7 +111,8 @@ systemctl start "$SERVICE"
 SERVICE_STOPPED=0
 
 CURRENT_PHASE=health-check
-write_status running "$CURRENT_PHASE" "Checking the updated bot and deploying slash commands."
+CURRENT_PROGRESS=60
+write_status running "$CURRENT_PHASE" "Checking the updated bot and deploying slash commands." "$CURRENT_PROGRESS"
 sleep 30
 after_restarts=$(systemctl show --property=NRestarts --value "$SERVICE")
 if ! systemctl is-active --quiet "$SERVICE" || [[ "$before_restarts" != "$after_restarts" ]]; then
@@ -116,12 +121,15 @@ if ! systemctl is-active --quiet "$SERVICE" || [[ "$before_restarts" != "$after_
 fi
 
 CURRENT_PHASE=deploy
+CURRENT_PROGRESS=75
+write_status running "$CURRENT_PHASE" "Deploying slash commands." "$CURRENT_PROGRESS"
 runuser -u discordbot -- "$NODE" "$RUNNER" deploy-current
 RELEASE_HEALTHY=1
 RELEASE_PROMOTED=0
 
 CURRENT_PHASE=ubuntu-upgrade
-write_status running "$CURRENT_PHASE" "Updating Ubuntu packages and applying the configured release upgrade."
+CURRENT_PROGRESS=85
+write_status running "$CURRENT_PHASE" "Updating Ubuntu packages and applying the configured release upgrade." "$CURRENT_PROGRESS"
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
 apt-get update
@@ -152,7 +160,8 @@ new_version=$(awk -F= '/^VERSION_ID=/{gsub(/"/, "", $2); print $2}' /etc/os-rele
 
 if [[ -e /var/run/reboot-required || "$old_version" != "$new_version" ]]; then
   CURRENT_PHASE=reboot-scheduled
-  write_status running "$CURRENT_PHASE" "System updates require a reboot; it is scheduled for the next 04:00 UTC."
+  CURRENT_PROGRESS=95
+  write_status running "$CURRENT_PHASE" "System updates require a reboot; it is scheduled for the next 04:00 UTC." "$CURRENT_PROGRESS"
   systemd-run --quiet \
     --no-block \
     --unit="mocs-bot-reboot-$(date -u +%Y%m%d%H%M%S)" \
@@ -162,8 +171,10 @@ if [[ -e /var/run/reboot-required || "$old_version" != "$new_version" ]]; then
     /usr/bin/systemctl reboot
 else
   CURRENT_PHASE=complete
-  write_status succeeded "$CURRENT_PHASE" "The bot and Ubuntu are up to date. No reboot is required."
+  CURRENT_PROGRESS=100
+  write_status succeeded "$CURRENT_PHASE" "The bot and Ubuntu are up to date. No reboot is required." "$CURRENT_PROGRESS"
   exit 0
 fi
 
-write_status succeeded complete "The bot and Ubuntu are updated. The required reboot is scheduled for the next 04:00 UTC."
+CURRENT_PROGRESS=100
+write_status succeeded complete "The bot and Ubuntu are updated. The required reboot is scheduled for the next 04:00 UTC." "$CURRENT_PROGRESS"
