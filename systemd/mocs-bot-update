@@ -18,6 +18,7 @@ RELEASE_HEALTHY=0
 SERVICE_STOPPED=0
 CURRENT_PROGRESS=0
 HEALTH_CHECK_FAILURE=
+STATUS_FINALIZED=0
 
 write_status() {
   local state=$1
@@ -30,6 +31,18 @@ write_status() {
     "$state" "$phase" "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" "$message" "$progress" > "$temporary"
   chmod 644 "$temporary"
   mv -f "$temporary" "$STATUS_FILE"
+  if [[ "$state" == succeeded || "$state" == failed ]]; then
+    STATUS_FINALIZED=1
+  fi
+}
+
+update_exit() {
+  local code=$?
+  if [[ "$code" -ne 0 && "$STATUS_FINALIZED" -eq 0 ]]; then
+    trap - EXIT
+    write_status failed "${CURRENT_PHASE:-unknown}" \
+      "Updater exited during ${CURRENT_PHASE:-unknown} with exit code ${code} before reporting a final status. Check the system journal."
+  fi
 }
 
 update_error() {
@@ -136,6 +149,7 @@ refresh_fallback() {
 }
 
 trap update_error ERR
+trap update_exit EXIT
 
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then

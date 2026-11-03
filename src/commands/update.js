@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const { EmbedBuilder, MessageFlags, SlashCommandBuilder } = require('discord.js');
 const { isPrivilegedDiscordUser } = require('../services/linkedUsers');
@@ -36,6 +36,25 @@ function readUpdateStatus(statusFile = UPDATE_STATUS_FILE) {
     values[line.slice(0, separator)] = line.slice(separator + 1);
   }
   return values;
+}
+
+function isUpdateServiceActive() {
+  const result = spawnSync('/usr/bin/systemctl', ['is-active', '--quiet', UPDATE_SERVICE], {
+    stdio: 'ignore',
+  });
+  if (result.error) throw result.error;
+  if (result.status === 0) return true;
+  if (result.status === 3 || result.status === 4) return false;
+  throw new Error(`Could not determine whether ${UPDATE_SERVICE} is active (exit code ${result.status}).`);
+}
+
+function resolveUpdateStatus(status, checkServiceActive = isUpdateServiceActive) {
+  if (status?.state !== 'running' || checkServiceActive()) return status;
+  return {
+    ...status,
+    state: 'failed',
+    message: 'The previous updater process is no longer running. Run `/update` again to start a new update.',
+  };
 }
 
 function buildUpdateEmbed(status) {
@@ -102,14 +121,18 @@ async function execute(interaction) {
     });
   }
 
+  let status = readUpdateStatus();
+  if (status?.state === 'running') {
+    status = resolveUpdateStatus(status);
+  }
+
   if (interaction.options.getBoolean('status')) {
     return interaction.reply({
-      embeds: [buildUpdateEmbed(readUpdateStatus())],
+      embeds: [buildUpdateEmbed(status)],
       flags: MessageFlags.Ephemeral,
     });
   }
 
-  const status = readUpdateStatus();
   if (status?.state === 'running') {
     return interaction.reply({
       embeds: [buildUpdateEmbed(status)],
@@ -174,6 +197,7 @@ module.exports = {
   execute,
   readUpdateStatus,
   buildUpdateEmbed,
+  resolveUpdateStatus,
   startUpdateJob,
   statusChanged,
 };

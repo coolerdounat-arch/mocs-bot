@@ -7,6 +7,7 @@ const {
   data,
   buildUpdateEmbed,
   readUpdateStatus,
+  resolveUpdateStatus,
   statusChanged,
 } = require('../src/commands/update');
 const { getLoadingEmoji } = require('../src/services/loadingScreen');
@@ -44,6 +45,20 @@ test('update status reads phase details and presents an update embed', () => {
 
 test('update status without a status file is empty', () => {
   assert.equal(readUpdateStatus('/nonexistent/mocs-update-status-test'), null);
+});
+
+test('update status only stays running while the updater service is active', () => {
+  const running = { state: 'running', phase: 'ubuntu-upgrade', progress: '85' };
+  assert.equal(resolveUpdateStatus(running, () => true), running);
+  assert.deepEqual(resolveUpdateStatus(running, () => false), {
+    ...running,
+    state: 'failed',
+    message: 'The previous updater process is no longer running. Run `/update` again to start a new update.',
+  });
+  const completed = { state: 'succeeded', phase: 'complete' };
+  assert.equal(resolveUpdateStatus(completed, () => {
+    assert.fail('Terminal statuses should not query the updater service.');
+  }), completed);
 });
 
 test('update progress detects a new phase and progress value', () => {
