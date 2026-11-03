@@ -7,7 +7,6 @@ const BRANCH = 'main';
 const BOT_DIRECTORY = '/opt/discord-bot';
 const STAGING_DIRECTORY = '/opt/discord-bot.update-staging';
 const NPM_CACHE_DIRECTORY = '/var/cache/mocs-bot-npm';
-const PRIVATE_TEST_DIRECTORY = '/opt/discord-bot(new)/test';
 const NODE_DIRECTORY = path.dirname(process.execPath);
 const env = {
   ...process.env,
@@ -41,42 +40,26 @@ function findJavaScriptFiles(directory) {
 
 function validateRelease() {
   const testDirectory = path.join(STAGING_DIRECTORY, 'test');
-  let copiedPrivateTests = false;
-  let testFiles = findJavaScriptFiles(testDirectory)
+  const testFiles = findJavaScriptFiles(testDirectory)
     .filter((file) => /\.(?:test|spec)\.[cm]?js$/i.test(file));
 
-  if (!testFiles.length && fs.existsSync(PRIVATE_TEST_DIRECTORY)) {
-    const privateTestInfo = fs.lstatSync(PRIVATE_TEST_DIRECTORY);
-    if (!privateTestInfo.isDirectory() || privateTestInfo.isSymbolicLink()) {
-      throw new Error('The private test path must be a real directory.');
-    }
-    fs.cpSync(PRIVATE_TEST_DIRECTORY, testDirectory, { recursive: true, errorOnExist: true });
-    copiedPrivateTests = true;
-    testFiles = findJavaScriptFiles(testDirectory)
-      .filter((file) => /\.(?:test|spec)\.[cm]?js$/i.test(file));
+  if (testFiles.length) {
+    reportProgress(27, 'Running release tests.');
+    run('npm', ['test'], STAGING_DIRECTORY);
+  } else {
+    console.warn('No test suite is available; validating JavaScript syntax only.');
   }
 
-  try {
-    if (testFiles.length) {
-      reportProgress(27, 'Running private release tests.');
-      run('npm', ['test'], STAGING_DIRECTORY);
-    } else {
-      console.warn('No test suite is available; validating JavaScript syntax only.');
-    }
-
-    reportProgress(36, 'Checking JavaScript syntax.');
-    const sourceFiles = ['src', 'scripts']
-      .flatMap((directory) => findJavaScriptFiles(path.join(STAGING_DIRECTORY, directory)));
-    if (!sourceFiles.length) {
-      throw new Error('The staged release contains no JavaScript source files.');
-    }
-    for (const sourceFile of sourceFiles) {
-      run(process.execPath, ['--check', sourceFile], STAGING_DIRECTORY);
-    }
-    reportProgress(42, 'Release checks passed.');
-  } finally {
-    if (copiedPrivateTests) fs.rmSync(testDirectory, { recursive: true, force: true });
+  reportProgress(36, 'Checking JavaScript syntax.');
+  const sourceFiles = ['src', 'scripts']
+    .flatMap((directory) => findJavaScriptFiles(path.join(STAGING_DIRECTORY, directory)));
+  if (!sourceFiles.length) {
+    throw new Error('The staged release contains no JavaScript source files.');
   }
+  for (const sourceFile of sourceFiles) {
+    run(process.execPath, ['--check', sourceFile], STAGING_DIRECTORY);
+  }
+  reportProgress(42, 'Release checks passed.');
 }
 
 function prepareRelease() {

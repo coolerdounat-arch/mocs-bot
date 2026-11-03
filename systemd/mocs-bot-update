@@ -133,25 +133,40 @@ mv "$STAGING_DIRECTORY" "$BOT_DIRECTORY"
 RELEASE_PROMOTED=1
 systemctl start "$SERVICE"
 SERVICE_STOPPED=0
-health_check_restarts=$(systemctl show --property=NRestarts --value "$SERVICE")
 
 CURRENT_PHASE=health-check
-CURRENT_PROGRESS=60
-write_status running "$CURRENT_PHASE" "Checking that the updated bot stays healthy." "$CURRENT_PROGRESS"
-for health_check_elapsed in 5 10 15 20 25 30; do
+HEALTH_CHECK_TIMEOUT_SECONDS=120
+HEALTH_CHECK_STABLE_SECONDS=30
+HEALTH_CHECK_POLL_SECONDS=5
+health_check_elapsed=0
+health_check_stable=0
+health_check_pid=
+health_check_state=unknown
+health_check_main_pid=0
+write_status running "$CURRENT_PHASE" "Waiting for the updated bot to stay healthy." 60
+while (( health_check_elapsed < HEALTH_CHECK_TIMEOUT_SECONDS && health_check_stable < HEALTH_CHECK_STABLE_SECONDS )); do
   sleep 5
-  if ! systemctl is-active --quiet "$SERVICE"; then
-    HEALTH_CHECK_FAILURE="The updated bot service became inactive during the health check."
-    false
+  health_check_elapsed=$((health_check_elapsed + HEALTH_CHECK_POLL_SECONDS))
+  health_check_state=$(systemctl show --property=ActiveState --value "$SERVICE")
+  health_check_main_pid=$(systemctl show --property=MainPID --value "$SERVICE")
+  if [[ "$health_check_state" == active && "$health_check_main_pid" =~ ^[1-9][0-9]*$ ]]; then
+    if [[ "$health_check_main_pid" == "$health_check_pid" ]]; then
+      health_check_stable=$((health_check_stable + HEALTH_CHECK_POLL_SECONDS))
+    else
+      health_check_pid=$health_check_main_pid
+      health_check_stable=0
+    fi
+  else
+    health_check_pid=
+    health_check_stable=0
   fi
-  current_restarts=$(systemctl show --property=NRestarts --value "$SERVICE")
-  if [[ "$health_check_restarts" != "$current_restarts" ]]; then
-    HEALTH_CHECK_FAILURE="The updated bot service restarted during the health check."
-    false
-  fi
-  CURRENT_PROGRESS=$((60 + health_check_elapsed / 3))
-  write_status running "$CURRENT_PHASE" "The updated bot is healthy; verifying stability (${health_check_elapsed}/30 seconds)." "$CURRENT_PROGRESS"
+  CURRENT_PROGRESS=$((60 + health_check_elapsed * 14 / HEALTH_CHECK_TIMEOUT_SECONDS))
+  write_status running "$CURRENT_PHASE" "Health check: ${health_check_stable}/${HEALTH_CHECK_STABLE_SECONDS}s stable, ${health_check_elapsed}/${HEALTH_CHECK_TIMEOUT_SECONDS}s elapsed (service ${health_check_state})." "$CURRENT_PROGRESS"
 done
+if (( health_check_stable < HEALTH_CHECK_STABLE_SECONDS )); then
+  HEALTH_CHECK_FAILURE="The updated bot did not keep one active process for ${HEALTH_CHECK_STABLE_SECONDS} seconds within ${HEALTH_CHECK_TIMEOUT_SECONDS} seconds (last service state: ${health_check_state}, main PID: ${health_check_main_pid})."
+  false
+fi
 
 CURRENT_PHASE=deploy
 CURRENT_PROGRESS=75
