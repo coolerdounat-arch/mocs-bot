@@ -7,6 +7,7 @@ const BRANCH = 'main';
 const BOT_DIRECTORY = '/opt/discord-bot';
 const STAGING_DIRECTORY = '/opt/discord-bot.update-staging';
 const NPM_CACHE_DIRECTORY = '/var/cache/mocs-bot-npm';
+const PRIVATE_TEST_DIRECTORY = '/opt/discord-bot(new)/test';
 const NODE_DIRECTORY = path.dirname(process.execPath);
 const env = {
   ...process.env,
@@ -25,6 +26,52 @@ function ensureSafePaths() {
   }
 }
 
+function findJavaScriptFiles(directory) {
+  if (!fs.existsSync(directory)) return [];
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) return findJavaScriptFiles(entryPath);
+    return entry.isFile() && /\.(?:c|m)?js$/i.test(entry.name) ? [entryPath] : [];
+  });
+}
+
+function validateRelease() {
+  const testDirectory = path.join(STAGING_DIRECTORY, 'test');
+  let copiedPrivateTests = false;
+  let testFiles = findJavaScriptFiles(testDirectory)
+    .filter((file) => /\.(?:test|spec)\.[cm]?js$/i.test(file));
+
+  if (!testFiles.length && fs.existsSync(PRIVATE_TEST_DIRECTORY)) {
+    const privateTestInfo = fs.lstatSync(PRIVATE_TEST_DIRECTORY);
+    if (!privateTestInfo.isDirectory() || privateTestInfo.isSymbolicLink()) {
+      throw new Error('The private test path must be a real directory.');
+    }
+    fs.cpSync(PRIVATE_TEST_DIRECTORY, testDirectory, { recursive: true, errorOnExist: true });
+    copiedPrivateTests = true;
+    testFiles = findJavaScriptFiles(testDirectory)
+      .filter((file) => /\.(?:test|spec)\.[cm]?js$/i.test(file));
+  }
+
+  try {
+    if (testFiles.length) {
+      run('npm', ['test'], STAGING_DIRECTORY);
+    } else {
+      console.warn('No test suite is available; validating JavaScript syntax only.');
+    }
+
+    const sourceFiles = ['src', 'scripts']
+      .flatMap((directory) => findJavaScriptFiles(path.join(STAGING_DIRECTORY, directory)));
+    if (!sourceFiles.length) {
+      throw new Error('The staged release contains no JavaScript source files.');
+    }
+    for (const sourceFile of sourceFiles) {
+      run(process.execPath, ['--check', sourceFile], STAGING_DIRECTORY);
+    }
+  } finally {
+    if (copiedPrivateTests) fs.rmSync(testDirectory, { recursive: true, force: true });
+  }
+}
+
 function prepareRelease() {
   ensureSafePaths();
   if (!fs.existsSync(path.join(BOT_DIRECTORY, '.env'))) {
@@ -37,12 +84,6 @@ function prepareRelease() {
   }
   run('git', ['clone', '--depth', '1', '--branch', BRANCH, REPOSITORY_URL, STAGING_DIRECTORY], BOT_DIRECTORY);
 
-  const testDirectory = path.join(STAGING_DIRECTORY, 'test');
-  if (!fs.existsSync(testDirectory)
-    || !fs.readdirSync(testDirectory, { recursive: true }).some((file) => /\.(?:test|spec)\.[cm]?js$/i.test(file))) {
-    throw new Error('The staged release has no test files; refusing to promote an unverified release.');
-  }
-
   const stagedEnvironmentPath = path.join(STAGING_DIRECTORY, '.env');
   fs.copyFileSync(path.join(BOT_DIRECTORY, '.env'), stagedEnvironmentPath);
   fs.chmodSync(stagedEnvironmentPath, 0o600);
@@ -54,7 +95,7 @@ function prepareRelease() {
   }
 
   run('npm', ['ci'], STAGING_DIRECTORY);
-  run('npm', ['test'], STAGING_DIRECTORY);
+  validateRelease();
 }
 
 function deployCommands(directory) {

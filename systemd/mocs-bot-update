@@ -6,7 +6,7 @@ STAGING_DIRECTORY=/opt/discord-bot.update-staging
 SERVICE=discord-bot.service
 STATUS_FILE=/var/lib/mocs-bot/update-status
 NODE=/opt/node-v26.12.1-linux-x64/bin/node
-RUNNER=/opt/discord-bot/scripts/update-release.js
+RUNNER=/usr/local/libexec/mocs-bot-update-release.js
 NPM_CACHE_DIRECTORY=/var/cache/mocs-bot-npm
 LOCK_FILE=/run/mocs-bot-update.lock
 RELEASE_BACKUP=
@@ -61,7 +61,7 @@ rollback_release() {
   mv "$RELEASE_BACKUP" "$BOT_DIRECTORY" || return 1
   RELEASE_PROMOTED=0
   systemctl start "$SERVICE" || return 1
-  runuser -u discordbot -- "$NODE" "$BOT_DIRECTORY/scripts/update-release.js" deploy-rollback "$BOT_DIRECTORY" || return 1
+  runuser -u discordbot -- "$NODE" "$RUNNER" deploy-rollback "$BOT_DIRECTORY" || return 1
 }
 
 trap update_error ERR
