@@ -9,8 +9,8 @@ User=discordbot
 WorkingDirectory=/opt/discord-bot
 Environment=NODE_ENV=production
 Environment=PORTAL_PORT=3102
-Environment=PATH=/opt/node-v26.12.1-linux-x64/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/opt/node-v26.12.1-linux-x64/bin/node /opt/discord-bot/src/portalServer.js
+Environment=PATH=/opt/node-v26.13.0-linux-x64/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/node-v26.13.0-linux-x64/bin/node /opt/discord-bot/src/portalServer.js
 Restart=always
 RestartSec=5
 UMask=0077

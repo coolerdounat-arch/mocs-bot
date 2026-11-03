@@ -8,9 +8,9 @@ Type=simple
 User=discordbot
 WorkingDirectory=/opt/discord-bot(new)
 Environment=NODE_ENV=production
-Environment=PATH=/opt/node-v26.12.1-linux-x64/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/opt/node-v26.13.0-linux-x64/bin:/usr/local/bin:/usr/bin:/bin
 Environment="BOT_RESTART_COMMAND=/usr/bin/sudo /usr/bin/systemctl restart discord-bot-testing.service"
-ExecStart=/opt/node-v26.12.1-linux-x64/bin/node src/index.js
+ExecStart=/opt/node-v26.13.0-linux-x64/bin/node src/index.js
 Restart=always
 RestartSec=5
 UMask=0077
