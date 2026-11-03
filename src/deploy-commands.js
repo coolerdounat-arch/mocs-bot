@@ -6,6 +6,7 @@ const checkCtCommand = require('./commands/check-ct');
 const checkJoinCommand = require('./commands/check-join');
 const qpCommand = require('./commands/qp');
 const restartCommand = require('./commands/restart');
+const updateCommand = require('./commands/update');
 const systemStatsCommand = require('./commands/system-stats');
 const candidateCommand = require('./commands/candidate');
 const verifyCommand = require('./commands/verify');
@@ -22,6 +23,7 @@ const commands = [
   checkJoinCommand.data.toJSON(),
   qpCommand.data.toJSON(),
   restartCommand.data.toJSON(),
+  updateCommand.data.toJSON(),
   systemStatsCommand.data.toJSON(),
   candidateCommand.data.toJSON(),
   verifyCommand.data.toJSON(),

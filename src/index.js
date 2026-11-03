@@ -8,6 +8,7 @@ const checkCtCommand = require('./commands/check-ct');
 const checkJoinCommand = require('./commands/check-join');
 const qpCommand = require('./commands/qp');
 const restartCommand = require('./commands/restart');
+const updateCommand = require('./commands/update');
 const systemStatsCommand = require('./commands/system-stats');
 const candidateCommand = require('./commands/candidate');
 const verifyCommand = require('./commands/verify');
@@ -39,6 +40,7 @@ for (const command of [
   checkJoinCommand,
   qpCommand,
   restartCommand,
+  updateCommand,
   systemStatsCommand,
   candidateCommand,
   verifyCommand,

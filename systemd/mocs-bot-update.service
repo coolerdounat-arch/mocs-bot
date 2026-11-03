@@ -1,0 +1,10 @@
+[Unit]
+Description=Update the MoCS bot and Ubuntu server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/mocs-bot-update
+TimeoutStartSec=infinity
+UMask=0022

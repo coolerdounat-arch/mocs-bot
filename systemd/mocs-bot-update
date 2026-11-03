@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+BOT_DIRECTORY=/opt/discord-bot
+STAGING_DIRECTORY=/opt/discord-bot.update-staging
+SERVICE=discord-bot.service
+STATUS_FILE=/var/lib/mocs-bot/update-status
+NODE=/opt/node-v26.12.1-linux-x64/bin/node
+RUNNER=/opt/discord-bot/scripts/update-release.js
+LOCK_FILE=/run/mocs-bot-update.lock
+RELEASE_BACKUP=
+RELEASE_PROMOTED=0
+RELEASE_HEALTHY=0
+SERVICE_STOPPED=0
+
+write_status() {
+  local state=$1
+  local phase=$2
+  local message=$3
+  local temporary
+  temporary=$(mktemp /run/mocs-bot-update-status.XXXXXX)
+  printf 'state=%s\nphase=%s\nupdatedAt=%s\nmessage=%s\n' \
+    "$state" "$phase" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$message" > "$temporary"
+  chmod 644 "$temporary"
+  mv -f "$temporary" "$STATUS_FILE"
+}
+
+update_error() {
+  local code=$?
+  trap - ERR
+  if [[ "$RELEASE_PROMOTED" -eq 1 && "$RELEASE_HEALTHY" -eq 0 ]]; then
+    if ! rollback_release; then
+      write_status failed rollback "Update failed and automatic rollback was incomplete; administrator recovery is required."
+      exit 1
+    fi
+  elif [[ "$SERVICE_STOPPED" -eq 1 ]]; then
+    if [[ ! -e "$BOT_DIRECTORY" && -d "$RELEASE_BACKUP" ]]; then
+      if ! mv "$RELEASE_BACKUP" "$BOT_DIRECTORY"; then
+        write_status failed rollback "Promotion failed and the previous release could not be restored; administrator recovery is required."
+        exit 1
+      fi
+    fi
+    if ! systemctl start "$SERVICE"; then
+      write_status failed rollback "Promotion failed and the previous service could not be restarted; administrator recovery is required."
+      exit 1
+    fi
+  fi
+  write_status failed "${CURRENT_PHASE:-unknown}" "Update failed with exit code ${code}. The system journal contains details."
+  exit "$code"
+}
+
+CURRENT_PHASE=starting
+
+rollback_release() {
+  systemctl stop "$SERVICE" || return 1
+  local failed_directory="${BOT_DIRECTORY}.failed.$(date -u +%Y%m%dT%H%M%S%N)"
+  mv "$BOT_DIRECTORY" "$failed_directory" || return 1
+  mv "$RELEASE_BACKUP" "$BOT_DIRECTORY" || return 1
+  RELEASE_PROMOTED=0
+  systemctl start "$SERVICE" || return 1
+  runuser -u discordbot -- "$NODE" "$BOT_DIRECTORY/scripts/update-release.js" deploy-rollback "$BOT_DIRECTORY" || return 1
+}
+
+trap update_error ERR
+
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  exit 0
+fi
+
+if [[ ! -x "$NODE" || ! -f "$RUNNER" || ! -d "$BOT_DIRECTORY" ]]; then
+  write_status failed preflight "Updater prerequisites are missing; no changes were made."
+  exit 1
+fi
+if ! systemctl is-active --quiet "$SERVICE"; then
+  write_status failed preflight "The live bot service is not active; no changes were made."
+  exit 1
+fi
+service_exec_start=$(systemctl show --property=ExecStart --value "$SERVICE")
+if [[ "$service_exec_start" != *"$NODE"* ]]; then
+  write_status failed preflight "Install the reviewed Node 26 systemd unit before using /update; no changes were made."
+  exit 1
+fi
+
+CURRENT_PHASE=prepare
+write_status running "$CURRENT_PHASE" "Fetching main, installing dependencies, and running tests."
+if [[ -e "$STAGING_DIRECTORY" || -L "$STAGING_DIRECTORY" ]]; then
+  rm -rf -- "$STAGING_DIRECTORY"
+fi
+install -d -o discordbot -g discordbot -m 750 "$STAGING_DIRECTORY"
+runuser -u discordbot -- "$NODE" "$RUNNER" prepare
+if [[ -L "$STAGING_DIRECTORY" || ! -d "$STAGING_DIRECTORY" || ! -f "$STAGING_DIRECTORY/package.json" || ! -d "$STAGING_DIRECTORY/node_modules" ]]; then
+  write_status failed prepare "The staged release is incomplete; the live bot was not changed."
+  exit 1
+fi
+
+CURRENT_PHASE=promote
+write_status running "$CURRENT_PHASE" "Promoting the tested release."
+RELEASE_BACKUP="${BOT_DIRECTORY}.rollback.$(date -u +%Y%m%dT%H%M%S%N)"
+before_restarts=$(systemctl show --property=NRestarts --value "$SERVICE")
+systemctl stop "$SERVICE"
+SERVICE_STOPPED=1
+mv "$BOT_DIRECTORY" "$RELEASE_BACKUP"
+mv "$STAGING_DIRECTORY" "$BOT_DIRECTORY"
+RELEASE_PROMOTED=1
+systemctl start "$SERVICE"
+SERVICE_STOPPED=0
+
+CURRENT_PHASE=health-check
+write_status running "$CURRENT_PHASE" "Checking the updated bot and deploying slash commands."
+sleep 30
+after_restarts=$(systemctl show --property=NRestarts --value "$SERVICE")
+if ! systemctl is-active --quiet "$SERVICE" || [[ "$before_restarts" != "$after_restarts" ]]; then
+  CURRENT_PHASE=health-check
+  false
+fi
+
+CURRENT_PHASE=deploy
+runuser -u discordbot -- "$NODE" "$RUNNER" deploy-current
+RELEASE_HEALTHY=1
+RELEASE_PROMOTED=0
+
+CURRENT_PHASE=ubuntu-upgrade
+write_status running "$CURRENT_PHASE" "Updating Ubuntu packages and applying the configured release upgrade."
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+apt-get update
+apt-get -y full-upgrade
+if ! command -v do-release-upgrade >/dev/null 2>&1; then
+  apt-get -y install update-manager-core
+fi
+old_version=$(awk -F= '/^VERSION_ID=/{gsub(/"/, "", $2); print $2}' /etc/os-release)
+release_check_status=0
+if release_check=$(do-release-upgrade -c 2>&1); then
+  release_check_status=0
+else
+  release_check_status=$?
+fi
+printf '%s\n' "$release_check"
+if grep -Eqi "New release ['\"].* available" <<< "$release_check"; then
+  do-release-upgrade -f DistUpgradeViewNonInteractive
+elif grep -Eqi 'No new release found' <<< "$release_check"; then
+  :
+elif [[ "$release_check_status" -ne 0 ]]; then
+  printf 'Ubuntu release check failed with exit code %s.\n' "$release_check_status" >&2
+  exit 1
+else
+  printf '%s\n' 'Could not determine whether an Ubuntu release upgrade is available.' >&2
+  exit 1
+fi
+new_version=$(awk -F= '/^VERSION_ID=/{gsub(/"/, "", $2); print $2}' /etc/os-release)
+
+if [[ -e /var/run/reboot-required || "$old_version" != "$new_version" ]]; then
+  CURRENT_PHASE=reboot-scheduled
+  write_status running "$CURRENT_PHASE" "System updates require a reboot; it is scheduled for the next 04:00 UTC."
+  systemd-run --quiet \
+    --no-block \
+    --unit="mocs-bot-reboot-$(date -u +%Y%m%d%H%M%S)" \
+    --on-calendar='*-*-* 04:00:00 UTC' \
+    --property=AccuracySec=1s \
+    --collect \
+    /usr/bin/systemctl reboot
+else
+  CURRENT_PHASE=complete
+  write_status succeeded "$CURRENT_PHASE" "The bot and Ubuntu are up to date. No reboot is required."
+  exit 0
+fi
+
+write_status succeeded complete "The bot and Ubuntu are updated. The required reboot is scheduled for the next 04:00 UTC."
